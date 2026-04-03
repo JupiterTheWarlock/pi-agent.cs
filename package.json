@@ -14,5 +14,7 @@
     "url": "https://github.com/JupiterTheWarlock/pi-agent.cs.git"
   },
   "keywords": ["ai", "agent", "llm", "tool-calling", "game"],
-  "dependencies": {}
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
+  }
 }
