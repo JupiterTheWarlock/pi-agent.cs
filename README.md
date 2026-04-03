@@ -1,6 +1,6 @@
 # pi-agent.cs
 
-极简 C# AI Agent 框架，灵感来自 [badlogic/pi-mono](https://github.com/badlogic/pi-mono)。
+极简 C# AI Agent 框架，直接复刻自 [badlogic/pi-mono](https://github.com/badlogic/pi-mono) 的 `@mariozechner/pi-ai` 和 `@mariozechner/pi-agent-core` 两个模块，用 C# 重新实现。
 
 面向游戏场景设计，零 Unity 依赖，纯 `System.Net.Http` + `System.Text.Json` + `System.Reflection`。
 
@@ -237,12 +237,14 @@ dotnet test PiAgent.Tests/PiAgent.Tests.csproj
 PI_AGENT_API_KEY="your-key" dotnet test PiAgent.IntegrationTests/PiAgent.IntegrationTests.csproj
 ```
 
-## 灵感来源
+## 致谢
 
-- [badlogic/pi-mono](https://github.com/badlogic/pi-mono) — TypeScript AI agent toolkit
-  - `@mariozechner/pi-ai` → `PiAgent.PiAi`
-  - `@mariozechner/pi-agent-core` → `PiAgent.Core`
-- [lofcz/LLMTornado](https://github.com/lofcz/LLMTornado) — C# delegate → tool 映射灵感
+本项目直接复刻自 [badlogic/pi-mono](https://github.com/badlogic/pi-mono) 的两个核心模块：
+
+- `@mariozechner/pi-ai` → `PiAgent.PiAi`
+- `@mariozechner/pi-agent-core` → `PiAgent.Core`
+
+感谢 Mario Zechner 的优秀设计和开源贡献。Tool 系统的 C# delegate 映射思路参考了 [lofcz/LLMTornado](https://github.com/lofcz/LLMTornado)。
 
 ## License
 
