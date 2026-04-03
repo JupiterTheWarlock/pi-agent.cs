@@ -1,3 +1,4 @@
 references/
 bin/
 obj/
+*.nupkg

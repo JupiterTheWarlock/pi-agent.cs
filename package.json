@@ -1,0 +1,18 @@
+{
+  "name": "com.jupiter.pi-agent",
+  "displayName": "PiAgent.cs",
+  "version": "0.1.0",
+  "description": "Minimal C# AI Agent framework, ported from badlogic/pi-mono",
+  "unity": "2021.3",
+  "author": {
+    "name": "JupiterTheWarlock",
+    "url": "https://github.com/JupiterTheWarlock"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JupiterTheWarlock/pi-agent.cs.git"
+  },
+  "keywords": ["ai", "agent", "llm", "tool-calling", "game"],
+  "dependencies": {}
+}

@@ -5,10 +5,25 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <RootNamespace>PiAgent</RootNamespace>
+
+    <!-- NuGet metadata -->
+    <PackageId>PiAgent</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>JupiterTheWarlock</Authors>
+    <Description>Minimal C# AI Agent framework, ported from badlogic/pi-mono</Description>
+    <PackageTags>ai;agent;llm;tool-calling;game;unity</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/JupiterTheWarlock/pi-agent.cs</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/JupiterTheWarlock/pi-agent.cs</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Text.Json" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Remove="..\Runtime\**" />
+    <Compile Include="..\Runtime\**\*.cs" LinkBase="Runtime" />
   </ItemGroup>
 
 </Project>

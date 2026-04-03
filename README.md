@@ -42,10 +42,26 @@ var messages = await agent.Prompt("我往北走");
 var more = await agent.Continue();
 ```
 
+## 安装
+
+### Unity (UPM)
+Window → Package Manager → + → Add package from git URL
+```
+https://github.com/JupiterTheWarlock/pi-agent.cs.git
+```
+
+### NuGet
+```
+dotnet add package PiAgent
+```
+
+### 直接拷贝
+复制 `Runtime/` 目录到你的项目中即可。
+
 ## 项目结构
 
 ```
-PiAgent/src/
+Runtime/
 ├── PiAi/                    # namespace: PiAgent.PiAi
 │   ├── Types.cs             # 消息类型、Tool 定义、Context、Usage
 │   ├── ILLMClient.cs        # LLM 调用接口
