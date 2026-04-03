@@ -1,0 +1,6 @@
+[submodule "references/pi-mono"]
+	path = references/pi-mono
+	url = https://github.com/badlogic/pi-mono.git
+[submodule "references/LLMTornado"]
+	path = references/LLMTornado
+	url = https://github.com/lofcz/LLMTornado.git
