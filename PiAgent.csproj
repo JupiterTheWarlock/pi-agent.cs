@@ -22,8 +22,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Remove="..\Runtime\**" />
-    <Compile Include="..\Runtime\**\*.cs" LinkBase="Runtime" />
+    <None Remove="PiAgent.cs\Runtime\**" />
+    <Compile Include="PiAgent.cs\Runtime\**\*.cs" LinkBase="Runtime" />
   </ItemGroup>
 
 </Project>
