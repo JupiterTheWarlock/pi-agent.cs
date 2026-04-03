@@ -64,6 +64,14 @@ namespace PiAgent.PiAi
 
         [JsonPropertyName("thinking")]
         public string Thinking { get; set; } = "";
+
+        /// <summary>Opaque signature for multi-turn continuity (e.g., OpenAI reasoning item ID).</summary>
+        [JsonPropertyName("thinkingSignature")]
+        public string? ThinkingSignature { get; set; }
+
+        /// <summary>True if the thinking content was redacted by safety filters.</summary>
+        [JsonPropertyName("redacted")]
+        public bool Redacted { get; set; }
     }
 
     #endregion
@@ -200,6 +208,48 @@ namespace PiAgent.PiAi
 
     #endregion
 
+    #region Enums
+
+    /// <summary>
+    /// Reason why the LLM stopped generating.
+    /// </summary>
+    public enum StopReason
+    {
+        /// <summary>Normal completion.</summary>
+        Stop,
+        /// <summary>Max tokens reached.</summary>
+        Length,
+        /// <summary>Model wants to call a tool.</summary>
+        ToolUse,
+        /// <summary>API error occurred.</summary>
+        Error,
+        /// <summary>Request was aborted/cancelled.</summary>
+        Aborted
+    }
+
+    /// <summary>
+    /// Thinking/reasoning level for models that support it.
+    /// </summary>
+    public enum ThinkingLevel
+    {
+        Off,
+        Minimal,
+        Low,
+        Medium,
+        High
+    }
+
+    /// <summary>
+    /// Tool execution mode for the agent loop.
+    /// </summary>
+    public enum ToolExecutionMode
+    {
+        Sequential,
+        Parallel
+    }
+
+    #endregion
+
     #region Tool Definitions
 
     /// <summary>
@@ -257,7 +307,7 @@ namespace PiAgent.PiAi
 
     /// <summary>
     /// JSON Schema representation for tool parameters.
-    /// Simplified version — supports type, description, properties, required.
+    /// Supports type, description, properties, required, enum, default, strict.
     /// </summary>
     public class JsonSchema
     {
@@ -269,6 +319,9 @@ namespace PiAgent.PiAi
 
         [JsonPropertyName("required")]
         public List<string> Required { get; set; } = new();
+
+        [JsonPropertyName("additionalProperties")]
+        public bool? AdditionalProperties { get; set; }
 
         public JsonSchema() { }
 
@@ -293,6 +346,9 @@ namespace PiAgent.PiAi
         [JsonPropertyName("items")]
         public JsonSchemaProperty? Items { get; set; }
 
+        [JsonPropertyName("default")]
+        public object? DefaultValue { get; set; }
+
         public JsonSchemaProperty() { }
 
         public JsonSchemaProperty(string type, string? description = null)
@@ -300,6 +356,131 @@ namespace PiAgent.PiAi
             Type = type;
             Description = description;
         }
+    }
+
+    #endregion
+
+    #region Tool Metadata & Params
+
+    /// <summary>
+    /// Metadata for tool registration: extra params, excluded params, description overrides.
+    /// </summary>
+    public class ToolMetadata
+    {
+        /// <summary>
+        /// Extra parameters to include in the schema.
+        /// </summary>
+        public List<ToolParam>? ExtraParams { get; set; }
+
+        /// <summary>
+        /// Parameter names to exclude from the schema.
+        /// </summary>
+        public List<string>? ExcludeParams { get; set; }
+
+        /// <summary>
+        /// Override the tool description.
+        /// </summary>
+        public string? DescriptionOverride { get; set; }
+    }
+
+    /// <summary>
+    /// Describes a single tool parameter for manual (non-reflection) tool definition.
+    /// </summary>
+    public class ToolParam
+    {
+        /// <summary>Parameter name.</summary>
+        public string Name { get; set; } = "";
+
+        /// <summary>Parameter description (for the LLM).</summary>
+        public string? Description { get; set; }
+
+        /// <summary>JSON Schema type: "string", "integer", "number", "boolean", "array", "object".</summary>
+        public string Type { get; set; } = "string";
+
+        /// <summary>Whether the parameter is required. Default true.</summary>
+        public bool Required { get; set; } = true;
+
+        /// <summary>Allowed enum values (generates "enum" in JSON Schema).</summary>
+        public List<string>? EnumValues { get; set; }
+
+        /// <summary>Default value for optional parameters.</summary>
+        public object? DefaultValue { get; set; }
+
+        /// <summary>Schema for array items (when Type is "array").</summary>
+        public ToolParam? Items { get; set; }
+
+        /// <summary>Schema for object properties (when Type is "object").</summary>
+        public List<ToolParam>? ObjectProperties { get; set; }
+
+        public ToolParam() { }
+
+        public ToolParam(string name, string type, string? description = null, bool required = true)
+        {
+            Name = name;
+            Type = type;
+            Description = description;
+            Required = required;
+        }
+
+        /// <summary>Convenience: string parameter.</summary>
+        public static ToolParam Str(string name, string? description = null, bool required = true)
+            => new ToolParam(name, "string", description, required);
+
+        /// <summary>Convenience: integer parameter.</summary>
+        public static ToolParam Integer(string name, string? description = null, bool required = true)
+            => new ToolParam(name, "integer", description, required);
+
+        /// <summary>Convenience: number (float) parameter.</summary>
+        public static ToolParam Float(string name, string? description = null, bool required = true)
+            => new ToolParam(name, "number", description, required);
+
+        /// <summary>Convenience: boolean parameter.</summary>
+        public static ToolParam Boolean(string name, string? description = null, bool required = true)
+            => new ToolParam(name, "boolean", description, required);
+
+        /// <summary>Convenience: enum parameter (string with restricted values).</summary>
+        public static ToolParam Enum(string name, List<string> values, string? description = null, bool required = true)
+            => new ToolParam(name, "string", description, required) { EnumValues = values };
+
+        /// <summary>Convenience: array parameter.</summary>
+        public static ToolParam Array(string name, ToolParam items, string? description = null, bool required = true)
+            => new ToolParam(name, "array", description, required) { Items = items };
+
+        /// <summary>Convenience: object parameter.</summary>
+        public static ToolParam Object(string name, List<ToolParam> properties, string? description = null, bool required = true)
+            => new ToolParam(name, "object", description, required) { ObjectProperties = properties };
+
+        /// <summary>
+        /// Convert this ToolParam to a JsonSchemaProperty for the schema.
+        /// </summary>
+        public JsonSchemaProperty ToSchemaProperty()
+        {
+            var prop = new JsonSchemaProperty(Type, Description);
+            if (EnumValues != null && EnumValues.Count > 0)
+                prop.EnumValues = new List<string>(EnumValues);
+            if (DefaultValue != null)
+                prop.DefaultValue = DefaultValue;
+            if (Items != null)
+                prop.Items = Items.ToSchemaProperty();
+            return prop;
+        }
+    }
+
+    /// <summary>
+    /// Strict mode settings for OpenAI-compatible JSON schema validation.
+    /// </summary>
+    public class StrictMode
+    {
+        /// <summary>Whether strict mode is enabled.</summary>
+        public bool Enabled { get; set; }
+
+        public StrictMode(bool enabled = false)
+        {
+            Enabled = enabled;
+        }
+
+        public static StrictMode On => new StrictMode(true);
+        public static StrictMode Off => new StrictMode(false);
     }
 
     #endregion
@@ -348,6 +529,15 @@ namespace PiAgent.PiAi
         [JsonPropertyName("total")]
         public int TotalTokens { get; set; }
 
+        [JsonPropertyName("cacheRead")]
+        public int CacheReadTokens { get; set; }
+
+        [JsonPropertyName("cacheWrite")]
+        public int CacheWriteTokens { get; set; }
+
+        [JsonPropertyName("cost")]
+        public UsageCost Cost { get; set; } = new UsageCost();
+
         public Usage() { }
 
         public Usage(int input, int output, int total)
@@ -358,6 +548,27 @@ namespace PiAgent.PiAi
         }
 
         public static Usage Zero { get; } = new Usage(0, 0, 0);
+    }
+
+    /// <summary>
+    /// Cost breakdown for token usage (USD).
+    /// </summary>
+    public class UsageCost
+    {
+        [JsonPropertyName("input")]
+        public double Input { get; set; }
+
+        [JsonPropertyName("output")]
+        public double Output { get; set; }
+
+        [JsonPropertyName("cacheRead")]
+        public double CacheRead { get; set; }
+
+        [JsonPropertyName("cacheWrite")]
+        public double CacheWrite { get; set; }
+
+        [JsonPropertyName("total")]
+        public double Total { get; set; }
     }
 
     #endregion

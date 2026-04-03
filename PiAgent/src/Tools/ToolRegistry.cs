@@ -12,6 +12,7 @@ namespace PiAgent.Tools
     /// <summary>
     /// Registry that converts C# delegates into ToolDefinitions via reflection.
     /// Automatically generates JSON Schema from parameter types.
+    /// Supports ToolMetadata, enum params, default values, strict mode, and manual ToolParam API.
     /// </summary>
     public class ToolRegistry
     {
@@ -101,10 +102,39 @@ namespace PiAgent.Tools
         }
 
         /// <summary>
-        /// Register a tool from an arbitrary MethodInfo (for advanced scenarios).
+        /// Register a tool using manual ToolParam definitions (no reflection).
         /// </summary>
-        public AgentTool DefineFromMethod(string name, string description, MethodInfo method, object? target = null)
+        public AgentTool Define(string name, string description, List<ToolParam> parameters,
+            Func<Dictionary<string, object?>, CancellationToken, Task<string>> handler,
+            bool strict = false)
         {
+            var schema = BuildSchemaFromParams(parameters, strict);
+            var def = new ToolDefinition(name, description, schema);
+            var tool = new AgentTool(def, handler);
+            _tools.Add(tool);
+            return tool;
+        }
+
+        /// <summary>
+        /// Register a tool using manual ToolParam definitions (sync handler).
+        /// </summary>
+        public AgentTool Define(string name, string description, List<ToolParam> parameters,
+            Func<Dictionary<string, object?>, string> handler,
+            bool strict = false)
+        {
+            return Define(name, description, parameters, (args, ct) => Task.FromResult(handler(args)), strict);
+        }
+
+        /// <summary>
+        /// Register a tool from an arbitrary MethodInfo (for advanced scenarios).
+        /// Optional ToolMetadata for extra/excluded params and description overrides.
+        /// </summary>
+        public AgentTool DefineFromMethod(string name, string description, MethodInfo method, object? target = null, ToolMetadata? metadata = null)
+        {
+            var excludeSet = metadata?.ExcludeParams != null
+                ? new HashSet<string>(metadata.ExcludeParams)
+                : null;
+
             var parameters = method.GetParameters();
             var props = new Dictionary<string, JsonSchemaProperty>();
             var required = new List<string>();
@@ -112,15 +142,32 @@ namespace PiAgent.Tools
             foreach (var param in parameters)
             {
                 if (param.ParameterType == typeof(CancellationToken)) continue;
+                if (excludeSet != null && excludeSet.Contains(param.Name!)) continue;
 
                 var propSchema = TypeToJsonSchema(param.ParameterType, param.Name!);
+                if (param.HasDefaultValue)
+                    propSchema.DefaultValue = param.DefaultValue;
                 props[param.Name!] = propSchema;
                 if (!IsNullable(param.ParameterType) && !param.HasDefaultValue)
                     required.Add(param.Name!);
             }
 
+            // Add extra params from metadata
+            if (metadata?.ExtraParams != null)
+            {
+                foreach (var ep in metadata.ExtraParams)
+                {
+                    props[ep.Name] = ep.ToSchemaProperty();
+                    if (ep.Required)
+                        required.Add(ep.Name);
+                }
+            }
+
             var schema = new JsonSchema(props, required);
-            var def = new ToolDefinition(name, description, schema);
+            var def = new ToolDefinition(
+                name,
+                metadata?.DescriptionOverride ?? description,
+                schema);
 
             var tool = new AgentTool(def, async (args, ct) =>
             {
@@ -130,6 +177,10 @@ namespace PiAgent.Tools
                     if (param.ParameterType == typeof(CancellationToken))
                     {
                         invokeArgs.Add(ct);
+                    }
+                    else if (excludeSet != null && excludeSet.Contains(param.Name!))
+                    {
+                        continue;
                     }
                     else if (args.TryGetValue(param.Name!, out var value))
                     {
@@ -164,6 +215,27 @@ namespace PiAgent.Tools
         /// Get all tool definitions (for sending to LLM).
         /// </summary>
         public List<AgentTool> GetAll() => _tools.ToList();
+
+        /// <summary>
+        /// Build JSON Schema from manual ToolParam list.
+        /// </summary>
+        private static JsonSchema BuildSchemaFromParams(List<ToolParam> parameters, bool strict)
+        {
+            var props = new Dictionary<string, JsonSchemaProperty>();
+            var required = new List<string>();
+
+            foreach (var p in parameters)
+            {
+                props[p.Name] = p.ToSchemaProperty();
+                if (p.Required)
+                    required.Add(p.Name);
+            }
+
+            var schema = new JsonSchema(props, required);
+            if (strict)
+                schema.AdditionalProperties = false;
+            return schema;
+        }
 
         /// <summary>
         /// Build JSON Schema from a type.

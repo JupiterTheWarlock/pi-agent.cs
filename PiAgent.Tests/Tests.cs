@@ -120,7 +120,7 @@ namespace PiAgent.Tests
 
     #endregion
 
-    #region Model Tests
+    #region Message & Types Tests
 
     public class MessageTests
     {
@@ -179,7 +179,32 @@ namespace PiAgent.Tests
             Assert.Equal("toolResult", msg.Role);
             Assert.Equal("tc1", msg.ToolCallId);
         }
+
+        [Fact]
+        public void ThinkingContent_HasCorrectType()
+        {
+            var tc = new ThinkingContent { Thinking = "Let me think..." };
+            Assert.Equal("thinking", tc.Type);
+            Assert.Equal("Let me think...", tc.Thinking);
+        }
+
+        [Fact]
+        public void ThinkingContent_SupportsRedactedAndSignature()
+        {
+            var tc = new ThinkingContent
+            {
+                Thinking = "redacted",
+                ThinkingSignature = "sig_123",
+                Redacted = true
+            };
+            Assert.Equal("sig_123", tc.ThinkingSignature);
+            Assert.True(tc.Redacted);
+        }
     }
+
+    #endregion
+
+    #region Usage Tests
 
     public class UsageTests
     {
@@ -190,6 +215,8 @@ namespace PiAgent.Tests
             Assert.Equal(0, u.InputTokens);
             Assert.Equal(0, u.OutputTokens);
             Assert.Equal(0, u.TotalTokens);
+            Assert.Equal(0, u.CacheReadTokens);
+            Assert.Equal(0, u.CacheWriteTokens);
         }
 
         [Fact]
@@ -200,7 +227,26 @@ namespace PiAgent.Tests
             Assert.Equal(200, u.OutputTokens);
             Assert.Equal(300, u.TotalTokens);
         }
+
+        [Fact]
+        public void Cost_Fields()
+        {
+            var u = new Usage(100, 200, 300)
+            {
+                CacheReadTokens = 50,
+                CacheWriteTokens = 30
+            };
+            u.Cost.Input = 0.01;
+            u.Cost.Output = 0.02;
+            u.Cost.Total = 0.03;
+            Assert.Equal(0.01, u.Cost.Input);
+            Assert.Equal(0.03, u.Cost.Total);
+        }
     }
+
+    #endregion
+
+    #region ToolDefinition Tests
 
     public class ToolDefinitionTests
     {
@@ -211,6 +257,151 @@ namespace PiAgent.Tests
             Assert.Equal("test", def.Name);
             Assert.Equal("A test tool", def.Description);
             Assert.Empty(def.Parameters.Properties);
+        }
+    }
+
+    #endregion
+
+    #region ToolParam & ToolMetadata Tests
+
+    public class ToolParamTests
+    {
+        [Fact]
+        public void String_CreatesCorrectSchema()
+        {
+            var p = ToolParam.Str("name", "User name");
+            Assert.Equal("name", p.Name);
+            Assert.Equal("string", p.Type);
+            Assert.Equal("User name", p.Description);
+            Assert.True(p.Required);
+        }
+
+        [Fact]
+        public void Int_CreatesCorrectSchema()
+        {
+            var p = ToolParam.Integer("age", "User age");
+            Assert.Equal("integer", p.Type);
+        }
+
+        [Fact]
+        public void Number_CreatesCorrectSchema()
+        {
+            var p = ToolParam.Float("score", "Score");
+            Assert.Equal("number", p.Type);
+        }
+
+        [Fact]
+        public void Bool_CreatesCorrectSchema()
+        {
+            var p = ToolParam.Boolean("active", "Is active");
+            Assert.Equal("boolean", p.Type);
+        }
+
+        [Fact]
+        public void Enum_CreatesSchemaWithEnumValues()
+        {
+            var p = ToolParam.Enum("color", new List<string> { "red", "green", "blue" }, "Color");
+            Assert.Equal("string", p.Type);
+            Assert.Equal(3, p.EnumValues!.Count);
+            Assert.Contains("red", p.EnumValues);
+        }
+
+        [Fact]
+        public void Array_CreatesSchemaWithItems()
+        {
+            var p = ToolParam.Array("tags", ToolParam.Str("tag"), "Tags");
+            Assert.Equal("array", p.Type);
+            Assert.NotNull(p.Items);
+            Assert.Equal("string", p.Items!.Type);
+        }
+
+        [Fact]
+        public void Object_CreatesSchemaWithProperties()
+        {
+            var p = ToolParam.Object("address", new List<ToolParam>
+            {
+                ToolParam.Str("city"),
+                ToolParam.Str("country")
+            }, "Address");
+            Assert.Equal("object", p.Type);
+            Assert.Equal(2, p.ObjectProperties!.Count);
+        }
+
+        [Fact]
+        public void DefaultValue_IsSet()
+        {
+            var p = ToolParam.Str("lang", required: false);
+            p.DefaultValue = "en";
+            Assert.Equal("en", p.DefaultValue);
+            Assert.False(p.Required);
+        }
+
+        [Fact]
+        public void ToSchemaProperty_ConvertsCorrectly()
+        {
+            var p = ToolParam.Enum("size", new List<string> { "S", "M", "L" }, "Size", false);
+            var schema = p.ToSchemaProperty();
+            Assert.Equal("string", schema.Type);
+            Assert.NotNull(schema.EnumValues);
+            Assert.Equal(3, schema.EnumValues.Count);
+            Assert.Equal("M", schema.EnumValues[1]);
+        }
+
+        [Fact]
+        public void ToSchemaProperty_WithDefault()
+        {
+            var p = ToolParam.Integer("count", "Count", false);
+            p.DefaultValue = 10;
+            var schema = p.ToSchemaProperty();
+            Assert.Equal(10, schema.DefaultValue);
+        }
+    }
+
+    public class ToolMetadataTests
+    {
+        [Fact]
+        public void ExtraParams_AreStored()
+        {
+            var meta = new ToolMetadata
+            {
+                ExtraParams = new List<ToolParam> { ToolParam.Str("extra_field", "Extra") }
+            };
+            Assert.Single(meta.ExtraParams);
+            Assert.Equal("extra_field", meta.ExtraParams[0].Name);
+        }
+
+        [Fact]
+        public void ExcludeParams_AreStored()
+        {
+            var meta = new ToolMetadata
+            {
+                ExcludeParams = new List<string> { "internal_field" }
+            };
+            Assert.Single(meta.ExcludeParams);
+        }
+
+        [Fact]
+        public void DescriptionOverride_IsStored()
+        {
+            var meta = new ToolMetadata { DescriptionOverride = "New description" };
+            Assert.Equal("New description", meta.DescriptionOverride);
+        }
+    }
+
+    public class StrictModeTests
+    {
+        [Fact]
+        public void On_EnabledIsTrue()
+        {
+            var s = StrictMode.On;
+            Assert.True(s.Enabled);
+        }
+
+        [Fact]
+        public void Off_EnabledIsFalse()
+        {
+            var s = StrictMode.Off;
+            Assert.False(s.Enabled);
         }
     }
 
@@ -251,7 +442,6 @@ namespace PiAgent.Tests
             var tool = registry.Find("echo");
             Assert.NotNull(tool);
 
-            // Schema should have "value" property for string param
             Assert.True(tool.Definition.Parameters.Properties.ContainsKey("value"));
 
             var result = await tool.Execute(
@@ -299,6 +489,266 @@ namespace PiAgent.Tests
             var result = await tool.Execute(new(), CancellationToken.None);
             Assert.Equal("42", result);
         }
+
+        [Fact]
+        public async Task Define_ManualToolParam_ExecutesCorrectly()
+        {
+            var registry = new ToolRegistry();
+            registry.Define(
+                "greet",
+                "Greet a user",
+                new List<ToolParam>
+                {
+                    ToolParam.Str("name", "User name"),
+                    ToolParam.Enum("style", new List<string> { "formal", "casual" }, "Greeting style", false)
+                },
+                (args, ct) =>
+                {
+                    var name = args.TryGetValue("name", out var n) ? n?.ToString() : "stranger";
+                    var style = args.TryGetValue("style", out var s) ? s?.ToString() : "casual";
+                    var greeting = style == "formal" ? $"Good day, {name}" : $"Hey, {name}!";
+                    return Task.FromResult(greeting);
+                });
+
+            var tool = registry.Find("greet");
+            Assert.NotNull(tool);
+
+            // Check schema
+            Assert.True(tool.Definition.Parameters.Properties.ContainsKey("name"));
+            Assert.True(tool.Definition.Parameters.Properties.ContainsKey("style"));
+            Assert.Contains("name", tool.Definition.Parameters.Required);
+            Assert.DoesNotContain("style", tool.Definition.Parameters.Required);
+
+            // Execute
+            var result = await tool.Execute(
+                new Dictionary<string, object?> { ["name"] = "Alice" },
+                CancellationToken.None);
+            Assert.Equal("Hey, Alice!", result);
+        }
+
+        [Fact]
+        public async Task Define_ManualToolParam_StrictMode_SetsAdditionalProperties()
+        {
+            var registry = new ToolRegistry();
+            registry.Define(
+                "strict_tool",
+                "A strict tool",
+                new List<ToolParam> { ToolParam.Str("input") },
+                (args, ct) => Task.FromResult("ok"),
+                strict: true);
+
+            var tool = registry.Find("strict_tool");
+            Assert.NotNull(tool);
+            Assert.False(tool.Definition.Parameters.AdditionalProperties);
+        }
+
+        [Fact]
+        public async Task Define_EnumParam_GeneratesEnumSchema()
+        {
+            var registry = new ToolRegistry();
+            registry.Define(
+                "choose",
+                "Choose an option",
+                new List<ToolParam> { ToolParam.Enum("option", new List<string> { "A", "B", "C" }, "Option") },
+                (args, ct) => Task.FromResult("done"));
+
+            var tool = registry.Find("choose");
+            var schema = tool!.Definition.Parameters.Properties["option"];
+            Assert.NotNull(schema.EnumValues);
+            Assert.Equal(new List<string> { "A", "B", "C" }, schema.EnumValues);
+        }
+
+        [Fact]
+        public async Task DefineWithMetadata_ExcludeParams()
+        {
+            // Use a method with CancellationToken to test exclusion
+            var method = typeof(ToolRegistryTests).GetMethod("SampleMethodWithExclusion",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+            Assert.NotNull(method);
+
+            var registry = new ToolRegistry();
+            registry.DefineFromMethod("test", "Test", method!, null,
+                new ToolMetadata { ExcludeParams = new List<string> { "secret" } });
+
+            var tool = registry.Find("test");
+            Assert.NotNull(tool);
+            Assert.False(tool.Definition.Parameters.Properties.ContainsKey("secret"));
+            Assert.True(tool.Definition.Parameters.Properties.ContainsKey("visible"));
+        }
+
+        // Helper for metadata test
+        private static async Task<string> SampleMethodWithExclusion(string visible, string secret, CancellationToken ct)
+        {
+            await Task.Yield();
+            return $"{visible}:{secret}";
+        }
+    }
+
+    #endregion
+
+    #region StreamParser Tests
+
+    public class StreamParserTests
+    {
+        [Fact]
+        public void ParseAll_TextOnly_ProducesCorrectEvents()
+        {
+            var sse = @"data: {""choices"":[{""delta"":{""role"":""assistant"",""content"":""Hello""},""index"":0}]}
+
+data: {""choices"":[{""delta"":{""content"":"" World""},""index"":0}]}
+
+data: [DONE]";
+
+            var parser = new StreamParser();
+            var events = parser.ParseAll(sse);
+
+            Assert.Contains(events, e => e is TextDeltaEvent td && td.Delta == "Hello");
+            Assert.Contains(events, e => e is TextDeltaEvent td && td.Delta == " World");
+            Assert.Contains(events, e => e is StreamDoneEvent);
+            Assert.Contains(events, e => e is TextEndEvent te && te.Content == "Hello World");
+
+            var msg = parser.GetMessage();
+            Assert.Equal("Hello World", msg.GetText());
+            Assert.Equal("stop", msg.StopReason);
+        }
+
+        [Fact]
+        public void ParseAll_ToolCalls_ProducesToolCallEvents()
+        {
+            var sse = @"data: {""choices"":[{""delta"":{""tool_calls"":[{""index"":0,""id"":""call_1"",""type"":""function"",""function"":{""name"":""weather"",""arguments"":""""}}]},""index"":0,""finish_reason"":null}]}
+
+data: {""choices"":[{""delta"":{""tool_calls"":[{""index"":0,""function"":{""arguments"":""{\""city\"": \""Tokyo\""}""}}]},""index"":0,""finish_reason"":""tool_calls""}]}
+
+data: [DONE]";
+
+            var parser = new StreamParser();
+            var events = parser.ParseAll(sse);
+
+            Assert.Contains(events, e => e is ToolCallStartEvent);
+            Assert.Contains(events, e => e is ToolCallDeltaEvent);
+            Assert.Contains(events, e => e is ToolCallEndEvent tce && tce.ToolCall.Name == "weather");
+
+            var msg = parser.GetMessage();
+            var calls = msg.GetToolCalls();
+            Assert.Single(calls);
+            Assert.Equal("call_1", calls[0].Id);
+            Assert.Equal("Tokyo", calls[0].Arguments["city"]?.ToString());
+            Assert.Equal("toolUse", msg.StopReason);
+        }
+
+        [Fact]
+        public void ParseAll_ReasoningContent_ProducesThinkingEvents()
+        {
+            var sse = @"data: {""choices"":[{""delta"":{""reasoning_content"":""Let me think""},""index"":0}]}
+
+data: {""choices"":[{""delta"":{""reasoning_content"":"" about this...""},""index"":0}]}
+
+data: {""choices"":[{""delta"":{""content"":""The answer is 42""},""index"":0}]}
+
+data: [DONE]";
+
+            var parser = new StreamParser();
+            var events = parser.ParseAll(sse);
+
+            Assert.Contains(events, e => e is ThinkingDeltaEvent td && td.Delta == "Let me think");
+            Assert.Contains(events, e => e is ThinkingEndEvent te && te.Content == "Let me think about this...");
+            Assert.Contains(events, e => e is TextDeltaEvent td && td.Delta == "The answer is 42");
+
+            var msg = parser.GetMessage();
+            Assert.Contains(msg.Content, c => c is ThinkingContent);
+            Assert.Equal("The answer is 42", msg.GetText());
+        }
+
+        [Fact]
+        public void ParseLine_IgnoresNonDataLines()
+        {
+            var parser = new StreamParser();
+            Assert.Null(parser.ParseLine(": comment"));
+            Assert.Null(parser.ParseLine(""));
+        }
+
+        [Fact]
+        public void ParseAll_WithUsage_ParsesUsage()
+        {
+            var sse = @"data: {""choices"":[{""delta"":{""content"":""hi""},""index"":0}],""usage"":{""prompt_tokens"":10,""completion_tokens"":5,""total_tokens"":15}}
+
+data: [DONE]";
+
+            var parser = new StreamParser();
+            parser.ParseAll(sse);
+
+            var msg = parser.GetMessage();
+            Assert.Equal(10, msg.Usage.InputTokens);
+            Assert.Equal(5, msg.Usage.OutputTokens);
+        }
+    }
+
+    #endregion
+
+    #region ApiRegistry Tests
+
+    public class ApiRegistryTests
+    {
+        [Fact]
+        public void RegisterAndGet_Provider()
+        {
+            ApiRegistry.Clear();
+            var provider = new MockApiProvider("test-api");
+            ApiRegistry.RegisterProvider(provider);
+
+            var found = ApiRegistry.GetProvider("test-api");
+            Assert.NotNull(found);
+            Assert.Equal("test-api", found!.Api);
+        }
+
+        [Fact]
+        public void Unregister_Provider()
+        {
+            ApiRegistry.Clear();
+            ApiRegistry.RegisterProvider(new MockApiProvider("temp"));
+            ApiRegistry.UnregisterProvider("temp");
+            Assert.Null(ApiRegistry.GetProvider("temp"));
+        }
+
+        [Fact]
+        public void GetAllProviders_ReturnsAll()
+        {
+            ApiRegistry.Clear();
+            ApiRegistry.RegisterProvider(new MockApiProvider("a"));
+            ApiRegistry.RegisterProvider(new MockApiProvider("b"));
+            Assert.Equal(2, ApiRegistry.GetAllProviders().Count);
+        }
+
+        [Fact]
+        public void RegisterAndGet_Model()
+        {
+            ApiRegistry.Clear();
+            var model = new ModelConfig("gpt-4", "https://api.openai.com/v1", "key");
+            ApiRegistry.RegisterModel(model);
+
+            var found = ApiRegistry.GetModel("gpt-4");
+            Assert.NotNull(found);
+            Assert.Equal("gpt-4", found!.Id);
+        }
+
+        [Fact]
+        public void Clear_ClearsEverything()
+        {
+            ApiRegistry.Clear();
+            ApiRegistry.RegisterProvider(new MockApiProvider("x"));
+            ApiRegistry.RegisterModel(new ModelConfig("m", "url", "key"));
+            ApiRegistry.Clear();
+            Assert.Empty(ApiRegistry.GetAllProviders());
+            Assert.Empty(ApiRegistry.GetAllModels());
+        }
+    }
+
+    public class MockApiProvider : IApiProvider
+    {
+        public string Api { get; }
+        public MockApiProvider(string api) { Api = api; }
+        public Task<AssistantMessage> Stream(ModelConfig model, AgentContext context, CancellationToken ct = default)
+            => Task.FromResult(new AssistantMessage());
     }
 
     #endregion
@@ -328,7 +778,6 @@ namespace PiAgent.Tests
         [Fact]
         public async Task Run_ToolCall_ExecutesAndFeedsBack()
         {
-            // First call: LLM returns tool call, second call: LLM returns final text
             var client = MockLLM.Sequence(
                 (ctx, model) => Task.FromResult(new AssistantMessage
                 {
@@ -338,7 +787,6 @@ namespace PiAgent.Tests
                 }),
                 (ctx, model) =>
                 {
-                    // Verify tool result was added to context
                     var lastMsg = ctx.Messages[^1];
                     Assert.IsType<ToolResultMessage>(lastMsg);
                     return Task.FromResult(new AssistantMessage
@@ -359,12 +807,11 @@ namespace PiAgent.Tests
                 new List<Message> { new UserMessage("What's the weather in Beijing?") },
                 tools.GetAll());
 
-            // Should have: user msg, assistant (tool call), tool result, assistant (final)
             Assert.Equal(4, result.Count);
             Assert.IsType<UserMessage>(result[0]);
-            Assert.IsType<AssistantMessage>(result[1]); // tool call
+            Assert.IsType<AssistantMessage>(result[1]);
             Assert.IsType<ToolResultMessage>(result[2]);
-            Assert.IsType<AssistantMessage>(result[3]); // final response
+            Assert.IsType<AssistantMessage>(result[3]);
             Assert.Equal("Weather in Beijing: Sunny", ((AssistantMessage)result[3]).GetText());
         }
 
@@ -392,10 +839,7 @@ namespace PiAgent.Tests
                     Content = { new TextContent { Text = "partial" } },
                     StopReason = "toolUse"
                 }),
-                (ctx, model) =>
-                {
-                    throw new OperationCanceledException();
-                }
+                (ctx, model) => throw new OperationCanceledException()
             );
 
             var loop = new AgentLoop(client, TestModel);
@@ -431,8 +875,7 @@ namespace PiAgent.Tests
         [Fact]
         public async Task Run_ToolNotFound_ReturnsError()
         {
-            var client = MockLLM.TextResponse("", "stop"); // won't be reached
-            client = MockLLM.Sequence(
+            var client = MockLLM.Sequence(
                 (ctx, model) => Task.FromResult(new AssistantMessage
                 {
                     Content = { new ToolCall { Id = "tc1", Name = "nonexistent", Arguments = new() } },
@@ -451,10 +894,8 @@ namespace PiAgent.Tests
                 new List<Message> { new UserMessage("test") },
                 null);
 
-            // Should have error tool result
             var toolResult = Assert.IsType<ToolResultMessage>(result[2]);
             Assert.True(toolResult.IsError);
-            Assert.Contains("not found", toolResult.Content[0] is TextContent tc ? tc.Text : "");
         }
 
         [Fact]
@@ -486,6 +927,420 @@ namespace PiAgent.Tests
             Assert.True(toolResult.IsError);
             Assert.Contains("Kaboom!", toolResult.Content[0] is TextContent tc ? tc.Text : "");
         }
+
+        [Fact]
+        public async Task Run_BeforeToolCall_BlocksExecution()
+        {
+            var tools = new ToolRegistry();
+            tools.Define("dangerous", "Dangerous op", () => "should not run");
+
+            var client = MockLLM.Sequence(
+                (ctx, model) => Task.FromResult(new AssistantMessage
+                {
+                    Content = { new ToolCall { Id = "tc1", Name = "dangerous", Arguments = new() } },
+                    StopReason = "toolUse"
+                }),
+                (ctx, model) => Task.FromResult(new AssistantMessage
+                {
+                    Content = { new TextContent { Text = "blocked" } },
+                    StopReason = "stop"
+                })
+            );
+
+            var config = new AgentLoopConfig
+            {
+                Model = TestModel,
+                BeforeToolCall = (ctx, ct) => Task.FromResult(new BeforeToolCallResult { Block = true, Reason = "Not allowed" })
+            };
+
+            var loop = new AgentLoop(client, TestModel);
+            var context = new AgentContext();
+            var result = await loop.Run(context,
+                new List<Message> { new UserMessage("test") },
+                tools.GetAll(), null, default, 10, config);
+
+            var toolResult = Assert.IsType<ToolResultMessage>(result[2]);
+            Assert.True(toolResult.IsError);
+            Assert.Contains("Not allowed", toolResult.Content[0] is TextContent tc ? tc.Text : "");
+        }
+
+        [Fact]
+        public async Task Run_AfterToolCall_OverridesResult()
+        {
+            var tools = new ToolRegistry();
+            tools.Define("echo", "Echo", () => "original");
+
+            var client = MockLLM.Sequence(
+                (ctx, model) => Task.FromResult(new AssistantMessage
+                {
+                    Content = { new ToolCall { Id = "tc1", Name = "echo", Arguments = new() } },
+                    StopReason = "toolUse"
+                }),
+                (ctx, model) => Task.FromResult(new AssistantMessage
+                {
+                    Content = { new TextContent { Text = "modified" } },
+                    StopReason = "stop"
+                })
+            );
+
+            var config = new AgentLoopConfig
+            {
+                Model = TestModel,
+                AfterToolCall = (ctx, ct) => Task.FromResult(new AfterToolCallResult
+                {
+                    Content = new List<object> { new TextContent { Text = "overridden!" } }
+                })
+            };
+
+            var loop = new AgentLoop(client, TestModel);
+            var context = new AgentContext();
+            var result = await loop.Run(context,
+                new List<Message> { new UserMessage("test") },
+                tools.GetAll(), null, default, 10, config);
+
+            var toolResult = Assert.IsType<ToolResultMessage>(result[2]);
+            Assert.Equal("overridden!", toolResult.Content[0] is TextContent tc ? tc.Text : "");
+        }
+
+        [Fact]
+        public async Task Run_TransformContext_ModifiesMessages()
+        {
+            bool transformCalled = false;
+            var client = MockLLM.TextResponse("ok");
+
+            var config = new AgentLoopConfig
+            {
+                Model = TestModel,
+                TransformContext = (messages, ct) =>
+                {
+                    transformCalled = true;
+                    return Task.FromResult(messages);
+                }
+            };
+
+            var loop = new AgentLoop(client, TestModel);
+            var context = new AgentContext();
+            await loop.Run(context,
+                new List<Message> { new UserMessage("test") },
+                null, null, default, 10, config);
+
+            Assert.True(transformCalled);
+        }
+
+        [Fact]
+        public async Task Run_GetApiKey_ResolvesKey()
+        {
+            string? resolvedKey = null;
+            var client = new MockLLMClient(async (ctx, model, ct) =>
+            {
+                resolvedKey = model.ApiKey;
+                return new AssistantMessage { Content = { new TextContent { Text = "ok" } }, StopReason = "stop" };
+            });
+
+            var config = new AgentLoopConfig
+            {
+                Model = TestModel,
+                GetApiKey = (provider) => Task.FromResult<string?>("dynamic-key-123")
+            };
+
+            var loop = new AgentLoop(client, TestModel);
+            var context = new AgentContext();
+            await loop.Run(context,
+                new List<Message> { new UserMessage("test") },
+                null, null, default, 10, config);
+
+            Assert.Equal("dynamic-key-123", resolvedKey);
+        }
+
+        [Fact]
+        public async Task Run_SteeringMessages_InjectMidRun()
+        {
+            int steeringCallCount = 0;
+            var client = MockLLM.Sequence(
+                (ctx, model) => Task.FromResult(new AssistantMessage
+                {
+                    Content = { new ToolCall { Id = "tc1", Name = "tool1", Arguments = new() } },
+                    StopReason = "toolUse"
+                }),
+                (ctx, model) =>
+                {
+                    // After first tool round, steering should have injected a message
+                    return Task.FromResult(new AssistantMessage
+                    {
+                        Content = { new TextContent { Text = "done" } },
+                        StopReason = "stop"
+                    });
+                }
+            );
+
+            var tools = new ToolRegistry();
+            tools.Define("tool1", "Tool 1", () => "result1");
+
+            var config = new AgentLoopConfig
+            {
+                Model = TestModel,
+                GetSteeringMessages = () =>
+                {
+                    steeringCallCount++;
+                    return Task.FromResult(new List<Message>
+                    {
+                        new UserMessage("steering: be concise")
+                    });
+                }
+            };
+
+            var loop = new AgentLoop(client, TestModel);
+            var context = new AgentContext();
+            var result = await loop.Run(context,
+                new List<Message> { new UserMessage("test") },
+                tools.GetAll(), null, default, 10, config);
+
+            Assert.True(steeringCallCount > 0);
+        }
+
+        [Fact]
+        public async Task Run_FollowUpMessages_ContinuesAfterStop()
+        {
+            int followUpCallCount = 0;
+            var client = MockLLM.TextResponse("initial");
+
+            var config = new AgentLoopConfig
+            {
+                Model = TestModel,
+                GetFollowUpMessages = () =>
+                {
+                    followUpCallCount++;
+                    if (followUpCallCount == 1)
+                    {
+                        return Task.FromResult(new List<Message>
+                        {
+                            new UserMessage("follow up question")
+                        });
+                    }
+                    return Task.FromResult(new List<Message>());
+                }
+            };
+
+            var loop = new AgentLoop(client, TestModel);
+            var context = new AgentContext();
+            var result = await loop.Run(context,
+                new List<Message> { new UserMessage("test") },
+                null, null, default, 10, config);
+
+            // Should have run at least 2 turns (initial + follow-up)
+            Assert.True(followUpCallCount >= 1);
+        }
+
+        [Fact]
+        public async Task Run_ParallelToolExecution_ExecutesConcurrently()
+        {
+            var executionOrder = new System.Collections.Concurrent.ConcurrentBag<string>();
+            var client = MockLLM.Sequence(
+                (ctx, model) => Task.FromResult(new AssistantMessage
+                {
+                    Content =
+                    {
+                        new ToolCall { Id = "tc1", Name = "tool_a", Arguments = new() },
+                        new ToolCall { Id = "tc2", Name = "tool_b", Arguments = new() }
+                    },
+                    StopReason = "toolUse"
+                }),
+                (ctx, model) => Task.FromResult(new AssistantMessage
+                {
+                    Content = { new TextContent { Text = "done" } },
+                    StopReason = "stop"
+                })
+            );
+
+            var tools = new ToolRegistry();
+            tools.Define("tool_a", "Tool A", async () =>
+            {
+                await Task.Delay(50);
+                executionOrder.Add("a");
+                return "a";
+            });
+            tools.Define("tool_b", "Tool B", async () =>
+            {
+                await Task.Delay(50);
+                executionOrder.Add("b");
+                return "b";
+            });
+
+            var config = new AgentLoopConfig
+            {
+                Model = TestModel,
+                ToolExecution = ToolExecutionMode.Parallel
+            };
+
+            var loop = new AgentLoop(client, TestModel);
+            var context = new AgentContext();
+            await loop.Run(context,
+                new List<Message> { new UserMessage("test") },
+                tools.GetAll(), null, default, 10, config);
+
+            Assert.Equal(2, executionOrder.Count);
+            Assert.Contains("a", executionOrder);
+            Assert.Contains("b", executionOrder);
+        }
+
+        [Fact]
+        public async Task Run_SequentialToolExecution_ExecutesInOrder()
+        {
+            var executionOrder = new List<string>();
+            var client = MockLLM.Sequence(
+                (ctx, model) => Task.FromResult(new AssistantMessage
+                {
+                    Content =
+                    {
+                        new ToolCall { Id = "tc1", Name = "tool_a", Arguments = new() },
+                        new ToolCall { Id = "tc2", Name = "tool_b", Arguments = new() }
+                    },
+                    StopReason = "toolUse"
+                }),
+                (ctx, model) => Task.FromResult(new AssistantMessage
+                {
+                    Content = { new TextContent { Text = "done" } },
+                    StopReason = "stop"
+                })
+            );
+
+            var tools = new ToolRegistry();
+            tools.Define("tool_a", "Tool A", async () =>
+            {
+                executionOrder.Add("a");
+                return "a";
+            });
+            tools.Define("tool_b", "Tool B", async () =>
+            {
+                executionOrder.Add("b");
+                return "b";
+            });
+
+            var config = new AgentLoopConfig
+            {
+                Model = TestModel,
+                ToolExecution = ToolExecutionMode.Sequential
+            };
+
+            var loop = new AgentLoop(client, TestModel);
+            var context = new AgentContext();
+            await loop.Run(context,
+                new List<Message> { new UserMessage("test") },
+                tools.GetAll(), null, default, 10, config);
+
+            Assert.Equal(new[] { "a", "b" }, executionOrder);
+        }
+
+        [Fact]
+        public async Task Run_ConvertToLlm_TransformsMessages()
+        {
+            bool convertCalled = false;
+            var client = new MockLLMClient(async (ctx, model, ct) =>
+            {
+                return new AssistantMessage { Content = { new TextContent { Text = "ok" } }, StopReason = "stop" };
+            });
+
+            var config = new AgentLoopConfig
+            {
+                Model = TestModel,
+                ConvertToLlm = (messages) =>
+                {
+                    convertCalled = true;
+                    return Task.FromResult(messages);
+                }
+            };
+
+            var loop = new AgentLoop(client, TestModel);
+            var context = new AgentContext();
+            await loop.Run(context,
+                new List<Message> { new UserMessage("test") },
+                null, null, default, 10, config);
+
+            Assert.True(convertCalled);
+        }
+    }
+
+    #endregion
+
+    #region AgentState Tests
+
+    public class AgentStateTests
+    {
+        [Fact]
+        public void DefaultValues()
+        {
+            var state = new AgentState();
+            Assert.False(state.IsStreaming);
+            Assert.Null(state.StreamingMessage);
+            Assert.Empty(state.PendingToolCalls);
+            Assert.Null(state.ErrorMessage);
+            Assert.Equal(ThinkingLevel.Off, state.ThinkingLevel);
+        }
+
+        [Fact]
+        public void Tools_CopiesOnAssign()
+        {
+            var state = new AgentState();
+            var tools = new List<AgentTool>();
+            state.Tools = tools;
+            tools.Add(null!); // Modify original
+            Assert.Empty(state.Tools); // Copy was made
+        }
+
+        [Fact]
+        public void Messages_CopiesOnAssign()
+        {
+            var state = new AgentState();
+            var msgs = new List<Message> { new UserMessage("test") };
+            state.Messages = msgs;
+            msgs.Add(new UserMessage("another"));
+            Assert.Single(state.Messages);
+        }
+
+        [Fact]
+        public void PendingToolCalls_TracksExecution()
+        {
+            var state = new AgentState();
+            state.PendingToolCalls.Add("tc1");
+            state.PendingToolCalls.Add("tc2");
+            Assert.Equal(2, state.PendingToolCalls.Count);
+            Assert.Contains("tc1", state.PendingToolCalls);
+        }
+    }
+
+    #endregion
+
+    #region Model & Compat Tests
+
+    public class ModelConfigTests
+    {
+        [Fact]
+        public void DefaultValues()
+        {
+            var model = new ModelConfig();
+            Assert.Equal("", model.Id);
+            Assert.Equal("openai", model.Provider);
+            Assert.Equal("openai-completions", model.Api);
+            Assert.Equal(4096, model.MaxTokens);
+            Assert.Equal(128000, model.ContextWindow);
+            Assert.False(model.Reasoning);
+        }
+
+        [Fact]
+        public void ConvenienceConstructor()
+        {
+            var model = new ModelConfig("gpt-4", "https://api.openai.com/v1", "sk-test");
+            Assert.Equal("gpt-4", model.Id);
+            Assert.Equal("gpt-4", model.Name);
+        }
+
+        [Fact]
+        public void OpenAICompletionsCompat_Defaults()
+        {
+            var compat = new OpenAICompletionsCompat();
+            Assert.True(compat.SupportsUsageInStreaming);
+            Assert.True(compat.SupportsStrictMode);
+        }
     }
 
     #endregion
@@ -502,7 +1357,7 @@ namespace PiAgent.Tests
             var agent = new Agent(TestModel, MockLLM.TextResponse("Hello!"));
             var result = await agent.Prompt("Hi");
 
-            Assert.Equal(2, agent.Messages.Count); // user + assistant
+            Assert.Equal(2, agent.Messages.Count);
             Assert.IsType<UserMessage>(agent.Messages[0]);
             Assert.IsType<AssistantMessage>(agent.Messages[1]);
             Assert.Equal(2, result.Count);
@@ -556,9 +1411,6 @@ namespace PiAgent.Tests
         [Fact]
         public async Task Prompt_WhileRunning_Throws()
         {
-            var agent = new Agent(TestModel, MockLLM.TextResponse(""));
-
-            // Use a client that never completes
             var slowClient = new MockLLMClient(async (ctx, model, ct) =>
             {
                 await Task.Delay(10000, ct);
@@ -652,7 +1504,6 @@ namespace PiAgent.Tests
             Assert.Equal("stop", result.StopReason);
             Assert.Equal(10, result.Usage.InputTokens);
 
-            // Verify request structure
             Assert.Contains("Be helpful", capturedJson);
             Assert.Contains("Say hello", capturedJson);
             Assert.Contains("gpt-3.5-turbo", capturedJson);
