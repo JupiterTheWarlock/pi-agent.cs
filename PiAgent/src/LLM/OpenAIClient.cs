@@ -53,8 +53,8 @@ namespace PiAgent.LLM
             var json = JsonSerializer.Serialize(request, JsonOpts);
 
             using var content = new StringContent(json, Encoding.UTF8, "application/json");
-            using var response = await _http.PostAsync($"{model.BaseUrl}/chat/completions", content,
-                HttpCompletionOption.ResponseHeadersRead, ct);
+            using var requestMsg = new HttpRequestMessage(HttpMethod.Post, $"{model.BaseUrl}/chat/completions") { Content = content };
+            using var response = await _http.SendAsync(requestMsg, HttpCompletionOption.ResponseHeadersRead, ct);
             var body = await response.Content.ReadAsStringAsync();
 
             if (!response.IsSuccessStatusCode)
@@ -214,7 +214,7 @@ namespace PiAgent.LLM
                     });
                 }
 
-                if (assistant.Content.Count > 0 && assistant.StopReason != "tool_calls")
+                if (assistant.Content.Count > 0)
                     assistant.StopReason = "toolUse";
             }
 

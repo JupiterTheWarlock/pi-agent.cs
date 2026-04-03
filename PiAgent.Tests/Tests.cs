@@ -1,12 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using PiAgent.Agent;
+using PiAgent.Core;
 using PiAgent.LLM;
 using PiAgent.Models;
 using PiAgent.Tools;
@@ -461,7 +462,7 @@ namespace PiAgent.Tests
         public async Task Run_ToolException_ReturnsErrorResult()
         {
             var tools = new ToolRegistry();
-            tools.Define("boom", "Boom", () => throw new Exception("Kaboom!"));
+            tools.Define("boom", "Boom", (Func<string>)(() => throw new Exception("Kaboom!")));
 
             var client = MockLLM.Sequence(
                 (ctx, model) => Task.FromResult(new AssistantMessage

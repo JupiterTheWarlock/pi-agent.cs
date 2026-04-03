@@ -6,7 +6,7 @@ using PiAgent.LLM;
 using PiAgent.Models;
 using PiAgent.Tools;
 
-namespace PiAgent.Agent
+namespace PiAgent.Core
 {
     /// <summary>
     /// High-level Agent: state management, tool registration, prompt/continue API.
@@ -34,13 +34,19 @@ namespace PiAgent.Agent
         /// <summary>
         /// Define a tool with no parameters.
         /// </summary>
+        public AgentTool DefineTool(string name, string description, Func<string> handler)
+            => _tools.Define(name, description, handler);
+
+        /// <summary>
+        /// Define an async tool with no parameters.
+        /// </summary>
         public AgentTool DefineTool(string name, string description, Func<Task<string>> handler)
             => _tools.Define(name, description, handler);
 
         /// <summary>
-        /// Define a tool with no parameters (sync).
+        /// Define an async tool with no parameters (with cancellation).
         /// </summary>
-        public AgentTool DefineTool(string name, string description, Func<string> handler)
+        public AgentTool DefineTool(string name, string description, Func<CancellationToken, Task<string>> handler)
             => _tools.Define(name, description, handler);
 
         /// <summary>
@@ -68,9 +74,8 @@ namespace PiAgent.Agent
                 var context = new AgentContext(SystemPrompt, Messages, _tools.GetAll());
                 var result = await _loop.Run(context, new List<Message> { userMsg }, _tools.GetAll(), OnEvent, ct);
 
-                // Sync messages back
-                Messages.Clear();
-                Messages.AddRange(context.Messages);
+                // context.Messages IS agent.Messages (same reference), 
+                // so Run already appended to it — no need to re-sync
                 return result;
             }
             finally
@@ -98,8 +103,7 @@ namespace PiAgent.Agent
                 var context = new AgentContext(SystemPrompt, Messages, _tools.GetAll());
                 var result = await _loop.Run(context, new List<Message>(), _tools.GetAll(), OnEvent, ct);
 
-                Messages.Clear();
-                Messages.AddRange(context.Messages);
+                // context.Messages IS agent.Messages (same reference), no need to re-sync
                 return result;
             }
             finally

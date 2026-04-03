@@ -22,6 +22,17 @@ namespace PiAgent.Tools
         /// <summary>
         /// Register a tool with no parameters.
         /// </summary>
+        public AgentTool Define(string name, string description, Func<string> handler)
+        {
+            var def = ToolDefinition.NoParams(name, description);
+            var tool = new AgentTool(def, (args, ct) => Task.FromResult(handler()));
+            _tools.Add(tool);
+            return tool;
+        }
+
+        /// <summary>
+        /// Register an async tool with no parameters.
+        /// </summary>
         public AgentTool Define(string name, string description, Func<Task<string>> handler)
         {
             var def = ToolDefinition.NoParams(name, description);
@@ -31,12 +42,12 @@ namespace PiAgent.Tools
         }
 
         /// <summary>
-        /// Register a tool with no parameters (sync).
+        /// Register an async tool with no parameters (with cancellation).
         /// </summary>
-        public AgentTool Define(string name, string description, Func<string> handler)
+        public AgentTool Define(string name, string description, Func<CancellationToken, Task<string>> handler)
         {
             var def = ToolDefinition.NoParams(name, description);
-            var tool = new AgentTool(def, (args, ct) => Task.FromResult(handler()));
+            var tool = new AgentTool(def, async (args, ct) => await handler(ct));
             _tools.Add(tool);
             return tool;
         }

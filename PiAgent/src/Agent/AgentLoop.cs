@@ -7,7 +7,7 @@ using PiAgent.LLM;
 using PiAgent.Models;
 using PiAgent.Tools;
 
-namespace PiAgent.Agent
+namespace PiAgent.Core
 {
     /// <summary>
     /// Core agent loop: prompt → LLM → tool calls → execute → feed back → repeat.
@@ -102,7 +102,7 @@ namespace PiAgent.Agent
 
                 // Check for tool calls
                 var toolCalls = assistant.GetToolCalls();
-                if (toolCalls.Count == 0)
+                if (toolCalls.Count == 0 && assistant.StopReason != "toolUse")
                 {
                     Emit(new TurnEndEvent { Message = assistant, ToolResults = new() });
                     break;

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using PiAgent.Models;
 
-namespace PiAgent.Agent
+namespace PiAgent.Core
 {
     /// <summary>
     /// Events emitted by the Agent during its lifecycle.
