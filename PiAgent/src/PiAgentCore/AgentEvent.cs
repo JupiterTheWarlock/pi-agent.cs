@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using PiAgent.Models;
+using PiAgent.PiAi;
 
 namespace PiAgent.Core
 {

@@ -7,9 +7,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
-using PiAgent.Models;
 
-namespace PiAgent.LLM
+namespace PiAgent.PiAi
 {
     /// <summary>
     /// OpenAI-compatible API client. Covers OpenAI, Azure, Groq, Together, 

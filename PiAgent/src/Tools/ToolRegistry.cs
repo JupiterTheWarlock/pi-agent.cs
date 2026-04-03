@@ -5,7 +5,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using PiAgent.Models;
+using PiAgent.PiAi;
 
 namespace PiAgent.Tools
 {

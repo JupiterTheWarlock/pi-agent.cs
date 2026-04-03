@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace PiAgent.Models
+namespace PiAgent.PiAi
 {
     /// <summary>
     /// LLM model configuration.

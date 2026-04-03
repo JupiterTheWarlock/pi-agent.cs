@@ -2,8 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using PiAgent.LLM;
-using PiAgent.Models;
+using PiAgent.PiAi;
 using PiAgent.Tools;
 
 namespace PiAgent.Core

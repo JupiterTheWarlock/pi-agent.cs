@@ -3,8 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using PiAgent.LLM;
-using PiAgent.Models;
+using PiAgent.PiAi;
 using PiAgent.Tools;
 
 namespace PiAgent.Core
@@ -28,13 +27,6 @@ namespace PiAgent.Core
         /// Run one full agent loop: process user messages through LLM, 
         /// execute any tool calls, feed results back, and repeat until done.
         /// </summary>
-        /// <param name="context">Mutable context (messages list will be appended to)</param>
-        /// <param name="newMessages">New messages to add to context</param>
-        /// <param name="tools">Available tools</param>
-        /// <param name="onEvent">Event callback for lifecycle updates</param>
-        /// <param name="ct">Cancellation token</param>
-        /// <param name="maxToolRounds">Max iterations of tool-calling loops (safety)</param>
-        /// <returns>All new messages produced during this run</returns>
         public async Task<List<Message>> Run(
             AgentContext context,
             List<Message> newMessages,
@@ -45,7 +37,6 @@ namespace PiAgent.Core
         {
             var produced = new List<Message>();
 
-            // Add new messages to context
             foreach (var msg in newMessages)
             {
                 context.Messages.Add(msg);
@@ -63,7 +54,6 @@ namespace PiAgent.Core
 
                 Emit(new TurnStartEvent());
 
-                // Call LLM
                 AssistantMessage assistant;
                 try
                 {
@@ -100,7 +90,6 @@ namespace PiAgent.Core
                     break;
                 }
 
-                // Check for tool calls
                 var toolCalls = assistant.GetToolCalls();
                 if (toolCalls.Count == 0 && assistant.StopReason != "toolUse")
                 {
@@ -108,7 +97,6 @@ namespace PiAgent.Core
                     break;
                 }
 
-                // Execute tool calls
                 var toolResults = await ExecuteTools(toolCalls, tools, Emit, ct);
                 foreach (var result in toolResults)
                 {

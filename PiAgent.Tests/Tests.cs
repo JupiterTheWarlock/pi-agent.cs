@@ -8,8 +8,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using PiAgent.Core;
-using PiAgent.LLM;
-using PiAgent.Models;
+using PiAgent.PiAi;
 using PiAgent.Tools;
 using Xunit;
 
