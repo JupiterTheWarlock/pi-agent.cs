@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -14,10 +14,10 @@ namespace PiAgent.PiAi
     /// </summary>
     public class TextContent
     {
-        [JsonPropertyName("type")]
+        [JsonProperty("type")]
         public string Type => "text";
 
-        [JsonPropertyName("text")]
+        [JsonProperty("text")]
         public string Text { get; set; } = "";
     }
 
@@ -26,13 +26,13 @@ namespace PiAgent.PiAi
     /// </summary>
     public class ImageContent
     {
-        [JsonPropertyName("type")]
+        [JsonProperty("type")]
         public string Type => "image";
 
-        [JsonPropertyName("data")]
+        [JsonProperty("data")]
         public string Data { get; set; } = "";
 
-        [JsonPropertyName("mimeType")]
+        [JsonProperty("mimeType")]
         public string MimeType { get; set; } = "image/png";
     }
 
@@ -41,16 +41,16 @@ namespace PiAgent.PiAi
     /// </summary>
     public class ToolCall
     {
-        [JsonPropertyName("type")]
+        [JsonProperty("type")]
         public string Type => "toolCall";
 
-        [JsonPropertyName("id")]
+        [JsonProperty("id")]
         public string Id { get; set; } = "";
 
-        [JsonPropertyName("name")]
+        [JsonProperty("name")]
         public string Name { get; set; } = "";
 
-        [JsonPropertyName("arguments")]
+        [JsonProperty("arguments")]
         public Dictionary<string, object?> Arguments { get; set; } = new();
     }
 
@@ -59,18 +59,18 @@ namespace PiAgent.PiAi
     /// </summary>
     public class ThinkingContent
     {
-        [JsonPropertyName("type")]
+        [JsonProperty("type")]
         public string Type => "thinking";
 
-        [JsonPropertyName("thinking")]
+        [JsonProperty("thinking")]
         public string Thinking { get; set; } = "";
 
         /// <summary>Opaque signature for multi-turn continuity (e.g., OpenAI reasoning item ID).</summary>
-        [JsonPropertyName("thinkingSignature")]
+        [JsonProperty("thinkingSignature")]
         public string? ThinkingSignature { get; set; }
 
         /// <summary>True if the thinking content was redacted by safety filters.</summary>
-        [JsonPropertyName("redacted")]
+        [JsonProperty("redacted")]
         public bool Redacted { get; set; }
     }
 
@@ -83,10 +83,10 @@ namespace PiAgent.PiAi
     /// </summary>
     public abstract class Message
     {
-        [JsonPropertyName("role")]
+        [JsonProperty("role")]
         public abstract string Role { get; }
 
-        [JsonPropertyName("timestamp")]
+        [JsonProperty("timestamp")]
         public long Timestamp { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     }
 
@@ -106,7 +106,7 @@ namespace PiAgent.PiAi
         /// <summary>
         /// Content blocks (text, image). Serialized as "content" array or string.
         /// </summary>
-        [JsonPropertyName("content")]
+        [JsonProperty("content")]
         public object Content
         {
             get
@@ -118,10 +118,10 @@ namespace PiAgent.PiAi
             {
                 if (value is string s)
                     Text = s;
-                else if (value is JsonElement el)
+                else if (value is JToken jt)
                 {
-                    if (el.ValueKind == JsonValueKind.String)
-                        Text = el.GetString();
+                    if (jt.Type == JTokenType.String)
+                        Text = jt.Value<string>();
                 }
             }
         }
@@ -144,16 +144,16 @@ namespace PiAgent.PiAi
     {
         public override string Role => "assistant";
 
-        [JsonPropertyName("content")]
+        [JsonProperty("content")]
         public List<object> Content { get; set; } = new();
 
-        [JsonPropertyName("usage")]
+        [JsonProperty("usage")]
         public Usage Usage { get; set; } = Usage.Zero;
 
-        [JsonPropertyName("stopReason")]
+        [JsonProperty("stopReason")]
         public string StopReason { get; set; } = "stop";
 
-        [JsonPropertyName("errorMessage")]
+        [JsonProperty("errorMessage")]
         public string? ErrorMessage { get; set; }
 
         [JsonIgnore]
@@ -193,16 +193,16 @@ namespace PiAgent.PiAi
     {
         public override string Role => "toolResult";
 
-        [JsonPropertyName("toolCallId")]
+        [JsonProperty("toolCallId")]
         public string ToolCallId { get; set; } = "";
 
-        [JsonPropertyName("toolName")]
+        [JsonProperty("toolName")]
         public string ToolName { get; set; } = "";
 
-        [JsonPropertyName("content")]
+        [JsonProperty("content")]
         public List<object> Content { get; set; } = new();
 
-        [JsonPropertyName("isError")]
+        [JsonProperty("isError")]
         public bool IsError { get; set; }
     }
 
@@ -257,13 +257,13 @@ namespace PiAgent.PiAi
     /// </summary>
     public class ToolDefinition
     {
-        [JsonPropertyName("name")]
+        [JsonProperty("name")]
         public string Name { get; set; } = "";
 
-        [JsonPropertyName("description")]
+        [JsonProperty("description")]
         public string Description { get; set; } = "";
 
-        [JsonPropertyName("parameters")]
+        [JsonProperty("parameters")]
         public JsonSchema Parameters { get; set; } = new JsonSchema();
 
         public ToolDefinition() { }
@@ -311,16 +311,16 @@ namespace PiAgent.PiAi
     /// </summary>
     public class JsonSchema
     {
-        [JsonPropertyName("type")]
+        [JsonProperty("type")]
         public string Type { get; set; } = "object";
 
-        [JsonPropertyName("properties")]
+        [JsonProperty("properties")]
         public Dictionary<string, JsonSchemaProperty> Properties { get; set; } = new();
 
-        [JsonPropertyName("required")]
+        [JsonProperty("required")]
         public List<string> Required { get; set; } = new();
 
-        [JsonPropertyName("additionalProperties")]
+        [JsonProperty("additionalProperties")]
         public bool? AdditionalProperties { get; set; }
 
         public JsonSchema() { }
@@ -334,19 +334,19 @@ namespace PiAgent.PiAi
 
     public class JsonSchemaProperty
     {
-        [JsonPropertyName("type")]
+        [JsonProperty("type")]
         public string Type { get; set; } = "string";
 
-        [JsonPropertyName("description")]
+        [JsonProperty("description")]
         public string? Description { get; set; }
 
-        [JsonPropertyName("enum")]
+        [JsonProperty("enum")]
         public List<string>? EnumValues { get; set; }
 
-        [JsonPropertyName("items")]
+        [JsonProperty("items")]
         public JsonSchemaProperty? Items { get; set; }
 
-        [JsonPropertyName("default")]
+        [JsonProperty("default")]
         public object? DefaultValue { get; set; }
 
         public JsonSchemaProperty() { }
@@ -492,13 +492,13 @@ namespace PiAgent.PiAi
     /// </summary>
     public class AgentContext
     {
-        [JsonPropertyName("systemPrompt")]
+        [JsonProperty("systemPrompt")]
         public string SystemPrompt { get; set; } = "";
 
-        [JsonPropertyName("messages")]
+        [JsonProperty("messages")]
         public List<Message> Messages { get; set; } = new();
 
-        [JsonPropertyName("tools")]
+        [JsonProperty("tools")]
         public List<AgentTool>? Tools { get; set; }
 
         public AgentContext() { }
@@ -520,22 +520,22 @@ namespace PiAgent.PiAi
     /// </summary>
     public class Usage
     {
-        [JsonPropertyName("input")]
+        [JsonProperty("input")]
         public int InputTokens { get; set; }
 
-        [JsonPropertyName("output")]
+        [JsonProperty("output")]
         public int OutputTokens { get; set; }
 
-        [JsonPropertyName("total")]
+        [JsonProperty("total")]
         public int TotalTokens { get; set; }
 
-        [JsonPropertyName("cacheRead")]
+        [JsonProperty("cacheRead")]
         public int CacheReadTokens { get; set; }
 
-        [JsonPropertyName("cacheWrite")]
+        [JsonProperty("cacheWrite")]
         public int CacheWriteTokens { get; set; }
 
-        [JsonPropertyName("cost")]
+        [JsonProperty("cost")]
         public UsageCost Cost { get; set; } = new UsageCost();
 
         public Usage() { }
@@ -555,19 +555,19 @@ namespace PiAgent.PiAi
     /// </summary>
     public class UsageCost
     {
-        [JsonPropertyName("input")]
+        [JsonProperty("input")]
         public double Input { get; set; }
 
-        [JsonPropertyName("output")]
+        [JsonProperty("output")]
         public double Output { get; set; }
 
-        [JsonPropertyName("cacheRead")]
+        [JsonProperty("cacheRead")]
         public double CacheRead { get; set; }
 
-        [JsonPropertyName("cacheWrite")]
+        [JsonProperty("cacheWrite")]
         public double CacheWrite { get; set; }
 
-        [JsonPropertyName("total")]
+        [JsonProperty("total")]
         public double Total { get; set; }
     }
 

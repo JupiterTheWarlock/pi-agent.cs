@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Text;
-using System.Text.Json;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -139,8 +139,8 @@ namespace PiAgent.PiAi
 
             try
             {
-                using var doc = JsonDocument.Parse(data);
-                return ParseJson(doc.RootElement);
+                var root = JObject.Parse(data);
+                return ParseJson(root);
             }
             catch
             {
@@ -163,25 +163,28 @@ namespace PiAgent.PiAi
             return events;
         }
 
-        private List<StreamEvent>? ParseJson(JsonElement root)
+        private List<StreamEvent>? ParseJson(JObject root)
         {
             var events = new List<StreamEvent>();
 
-            if (!root.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
+            var choices = root["choices"];
+            if (choices == null || !choices.HasValues)
             {
                 // Might be a usage-only chunk
-                if (root.TryGetProperty("usage", out var u))
+                var u = root["usage"];
+                if (u != null)
                     _usage = ParseUsage(u);
                 return null;
             }
 
             var choice = choices[0];
-            var delta = choice.GetProperty("delta");
+            var delta = choice["delta"];
 
             // Parse content text delta
-            if (delta.TryGetProperty("content", out var contentEl) && contentEl.ValueKind != JsonValueKind.Null)
+            var contentEl = delta?["content"];
+            if (contentEl != null && contentEl.Type != JTokenType.Null)
             {
-                var text = contentEl.GetString() ?? "";
+                var text = contentEl.Value<string>() ?? "";
                 if (!string.IsNullOrEmpty(text))
                 {
                     events.Add(new TextDeltaEvent
@@ -195,9 +198,10 @@ namespace PiAgent.PiAi
             }
 
             // Parse reasoning/thinking delta
-            if (delta.TryGetProperty("reasoning_content", out var reasoningEl) && reasoningEl.ValueKind != JsonValueKind.Null)
+            var reasoningEl = delta?["reasoning_content"];
+            if (reasoningEl != null && reasoningEl.Type != JTokenType.Null)
             {
-                var text = reasoningEl.GetString() ?? "";
+                var text = reasoningEl.Value<string>() ?? "";
                 if (!string.IsNullOrEmpty(text))
                 {
                     events.Add(new ThinkingDeltaEvent
@@ -211,11 +215,13 @@ namespace PiAgent.PiAi
             }
 
             // Parse tool call deltas
-            if (delta.TryGetProperty("tool_calls", out var tcEl))
+            var tcEl = delta?["tool_calls"];
+            if (tcEl != null)
             {
-                foreach (var tcItem in tcEl.EnumerateArray())
+                foreach (var tcItem in tcEl)
                 {
-                    var idx = tcItem.TryGetProperty("index", out var idxEl) ? idxEl.GetInt32() : 0;
+                    var idxEl = tcItem["index"];
+                    var idx = idxEl != null ? idxEl.Value<int>() : 0;
 
                     if (!_toolCalls.TryGetValue(idx, out var tc))
                     {
@@ -229,15 +235,19 @@ namespace PiAgent.PiAi
                         });
                     }
 
-                    if (tcItem.TryGetProperty("id", out var idEl))
-                        tc.Id = idEl.GetString() ?? tc.Id;
-                    if (tcItem.TryGetProperty("function", out var fnEl))
+                    var idEl = tcItem["id"];
+                    if (idEl != null)
+                        tc.Id = idEl.Value<string>() ?? tc.Id;
+                    var fnEl = tcItem["function"];
+                    if (fnEl != null)
                     {
-                        if (fnEl.TryGetProperty("name", out var nameEl))
-                            tc.Name = nameEl.GetString() ?? tc.Name;
-                        if (fnEl.TryGetProperty("arguments", out var argsEl))
+                        var nameEl = fnEl["name"];
+                        if (nameEl != null)
+                            tc.Name = nameEl.Value<string>() ?? tc.Name;
+                        var argsEl = fnEl["arguments"];
+                        if (argsEl != null)
                         {
-                            var argDelta = argsEl.GetString() ?? "";
+                            var argDelta = argsEl.Value<string>() ?? "";
                             _toolCallArgs[idx] += argDelta;
                             events.Add(new ToolCallDeltaEvent
                             {
@@ -251,11 +261,13 @@ namespace PiAgent.PiAi
             }
 
             // Parse finish reason
-            if (choice.TryGetProperty("finish_reason", out var frEl) && frEl.ValueKind != JsonValueKind.Null)
-                _finishReason = frEl.GetString() ?? _finishReason;
+            var frEl = choice["finish_reason"];
+            if (frEl != null && frEl.Type != JTokenType.Null)
+                _finishReason = frEl.Value<string>() ?? _finishReason;
 
             // Parse usage
-            if (root.TryGetProperty("usage", out var usageEl))
+            var usageEl = root["usage"];
+            if (usageEl != null)
                 _usage = ParseUsage(usageEl);
 
             return events.Count > 0 ? events : null;
@@ -296,7 +308,7 @@ namespace PiAgent.PiAi
                 var tc = kv.Value;
                 try
                 {
-                    tc.Arguments = JsonSerializer.Deserialize<Dictionary<string, object?>>(_toolCallArgs[kv.Key]) ?? new();
+                    tc.Arguments = JsonConvert.DeserializeObject<Dictionary<string, object?>>(_toolCallArgs[kv.Key]) ?? new();
                 }
                 catch
                 {
@@ -334,19 +346,24 @@ namespace PiAgent.PiAi
             return events;
         }
 
-        private static Usage ParseUsage(JsonElement u)
+        private static Usage ParseUsage(JToken u)
         {
             var usage = new Usage();
-            if (u.TryGetProperty("prompt_tokens", out var input))
-                usage.InputTokens = input.GetInt32();
-            if (u.TryGetProperty("completion_tokens", out var output))
-                usage.OutputTokens = output.GetInt32();
-            if (u.TryGetProperty("total_tokens", out var total))
-                usage.TotalTokens = total.GetInt32();
-            if (u.TryGetProperty("prompt_tokens_details", out var details))
+            var input = u["prompt_tokens"];
+            if (input != null)
+                usage.InputTokens = input.Value<int>();
+            var output = u["completion_tokens"];
+            if (output != null)
+                usage.OutputTokens = output.Value<int>();
+            var total = u["total_tokens"];
+            if (total != null)
+                usage.TotalTokens = total.Value<int>();
+            var details = u["prompt_tokens_details"];
+            if (details != null)
             {
-                if (details.TryGetProperty("cached_tokens", out var cached))
-                    usage.CacheReadTokens = cached.GetInt32();
+                var cached = details["cached_tokens"];
+                if (cached != null)
+                    usage.CacheReadTokens = cached.Value<int>();
             }
             return usage;
         }

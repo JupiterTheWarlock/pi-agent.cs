@@ -2,7 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using System.Text.Json;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using PiAgent.PiAi;
@@ -310,8 +311,8 @@ namespace PiAgent.Tools
                 return ConvertValue(v, typeof(T)) is T t ? t : default;
 
             // Try deserializing the whole args dict into T
-            var json = JsonSerializer.Serialize(args);
-            return JsonSerializer.Deserialize<T>(json);
+            var json = JsonConvert.SerializeObject(args);
+            return JsonConvert.DeserializeObject<T>(json);
         }
 
         private static object? ConvertValue(object? value, Type targetType)
@@ -321,7 +322,7 @@ namespace PiAgent.Tools
 
             return value switch
             {
-                JsonElement el => ConvertJsonElement(el, targetType),
+                JToken jt => ConvertJToken(jt, targetType),
                 string s when targetType == typeof(int) => int.TryParse(s, out var i) ? i : default,
                 string s when targetType == typeof(double) => double.TryParse(s, out var d) ? d : default,
                 string s when targetType == typeof(bool) => bool.TryParse(s, out var b) ? b : default,
@@ -330,21 +331,20 @@ namespace PiAgent.Tools
             };
         }
 
-        private static object? ConvertJsonElement(JsonElement el, Type targetType)
+        private static object? ConvertJToken(JToken jt, Type targetType)
         {
-            return el.ValueKind switch
+            return jt.Type switch
             {
-                JsonValueKind.String => el.GetString(),
-                JsonValueKind.Number => targetType == typeof(int) ? el.GetInt32() :
-                                        targetType == typeof(long) ? el.GetInt64() :
-                                        targetType == typeof(double) ? el.GetDouble() :
-                                        targetType == typeof(bool) ? el.GetBoolean() :
-                                        el.GetDouble(),
-                JsonValueKind.True => true,
-                JsonValueKind.False => false,
-                JsonValueKind.Object => JsonSerializer.Deserialize(el.GetRawText(), targetType),
-                JsonValueKind.Array => JsonSerializer.Deserialize(el.GetRawText(), targetType),
-                _ => el.ToString()
+                JTokenType.String => jt.Value<string>(),
+                JTokenType.Integer => targetType == typeof(int) ? jt.Value<int>() :
+                                       targetType == typeof(long) ? jt.Value<long>() :
+                                       jt.Value<int>(),
+                JTokenType.Float => targetType == typeof(double) ? jt.Value<double>() :
+                                    jt.Value<double>(),
+                JTokenType.Boolean => jt.Value<bool>(),
+                JTokenType.Object => JsonConvert.DeserializeObject(jt.ToString(), targetType),
+                JTokenType.Array => JsonConvert.DeserializeObject(jt.ToString(), targetType),
+                _ => jt.ToString()
             };
         }
 

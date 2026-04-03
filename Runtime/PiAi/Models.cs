@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
 
 namespace PiAgent.PiAi
 {
@@ -8,43 +8,43 @@ namespace PiAgent.PiAi
     /// </summary>
     public class ModelConfig
     {
-        [JsonPropertyName("id")]
+        [JsonProperty("id")]
         public string Id { get; set; } = "";
 
-        [JsonPropertyName("name")]
+        [JsonProperty("name")]
         public string Name { get; set; } = "";
 
-        [JsonPropertyName("provider")]
+        [JsonProperty("provider")]
         public string Provider { get; set; } = "openai";
 
-        [JsonPropertyName("api")]
+        [JsonProperty("api")]
         public string Api { get; set; } = "openai-completions";
 
-        [JsonPropertyName("baseUrl")]
+        [JsonProperty("baseUrl")]
         public string BaseUrl { get; set; } = "https://api.openai.com/v1";
 
-        [JsonPropertyName("apiKey")]
+        [JsonProperty("apiKey")]
         public string? ApiKey { get; set; }
 
-        [JsonPropertyName("maxTokens")]
+        [JsonProperty("maxTokens")]
         public int MaxTokens { get; set; } = 4096;
 
-        [JsonPropertyName("contextWindow")]
+        [JsonProperty("contextWindow")]
         public int ContextWindow { get; set; } = 128000;
 
-        [JsonPropertyName("temperature")]
+        [JsonProperty("temperature")]
         public double Temperature { get; set; } = 0.7;
 
         /// <summary>Whether this model supports reasoning/thinking.</summary>
-        [JsonPropertyName("reasoning")]
+        [JsonProperty("reasoning")]
         public bool Reasoning { get; set; }
 
         /// <summary>Supported input modalities.</summary>
-        [JsonPropertyName("input")]
+        [JsonProperty("input")]
         public List<string> Input { get; set; } = new() { "text" };
 
         /// <summary>Cost per million tokens (USD).</summary>
-        [JsonPropertyName("cost")]
+        [JsonProperty("cost")]
         public ModelCost Cost { get; set; } = new ModelCost();
 
         /// <summary>Custom headers for API requests.</summary>
@@ -75,16 +75,16 @@ namespace PiAgent.PiAi
     /// </summary>
     public class ModelCost
     {
-        [JsonPropertyName("input")]
+        [JsonProperty("input")]
         public double Input { get; set; }
 
-        [JsonPropertyName("output")]
+        [JsonProperty("output")]
         public double Output { get; set; }
 
-        [JsonPropertyName("cacheRead")]
+        [JsonProperty("cacheRead")]
         public double CacheRead { get; set; }
 
-        [JsonPropertyName("cacheWrite")]
+        [JsonProperty("cacheWrite")]
         public double CacheWrite { get; set; }
     }
 

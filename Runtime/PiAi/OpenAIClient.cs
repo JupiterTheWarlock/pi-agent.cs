@@ -3,8 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -16,10 +17,10 @@ namespace PiAgent.PiAi
     /// </summary>
     public class OpenAIClient : ILLMClient
     {
-        private static readonly JsonSerializerOptions JsonOpts = new()
+        private static readonly JsonSerializerSettings JsonOpts = new()
         {
-            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            ContractResolver = new DefaultContractResolver { NamingStrategy = new SnakeCaseNamingStrategy() },
+            NullValueHandling = NullValueHandling.Ignore,
         };
 
         private readonly HttpClient _http;
@@ -32,7 +33,7 @@ namespace PiAgent.PiAi
         public async Task<AssistantMessage> Complete(AgentContext context, ModelConfig model, CancellationToken ct = default)
         {
             var request = BuildRequest(context, model, stream: false);
-            var json = JsonSerializer.Serialize(request, JsonOpts);
+            var json = JsonConvert.SerializeObject(request, JsonOpts);
 
             using var requestMsg = new HttpRequestMessage(HttpMethod.Post, $"{model.BaseUrl}/chat/completions");
             requestMsg.Headers.TryAddWithoutValidation("Authorization", $"Bearer {model.ApiKey}");
@@ -51,7 +52,7 @@ namespace PiAgent.PiAi
             CancellationToken ct = default)
         {
             var request = BuildRequest(context, model, stream: true);
-            var json = JsonSerializer.Serialize(request, JsonOpts);
+            var json = JsonConvert.SerializeObject(request, JsonOpts);
 
             using var content = new StringContent(json, Encoding.UTF8, "application/json");
             using var requestMsg = new HttpRequestMessage(HttpMethod.Post, $"{model.BaseUrl}/chat/completions");
@@ -162,7 +163,7 @@ namespace PiAgent.PiAi
                     ["function"] = new Dictionary<string, object?>
                     {
                         ["name"] = tc.Name,
-                        ["arguments"] = JsonSerializer.Serialize(tc.Arguments)
+                        ["arguments"] = JsonConvert.SerializeObject(tc.Arguments)
                     }
                 }).ToArray();
             }
@@ -183,36 +184,37 @@ namespace PiAgent.PiAi
 
         private AssistantMessage ParseResponse(string body, ModelConfig model)
         {
-            using var doc = JsonDocument.Parse(body);
-            var root = doc.RootElement;
-            var choice = root.GetProperty("choices")[0];
-            var msg = choice.GetProperty("message");
+            var root = JObject.Parse(body);
+            var choice = root["choices"]?[0];
+            var msg = choice?["message"];
 
             var assistant = new AssistantMessage
             {
                 Usage = ParseUsage(root),
-                StopReason = choice.GetProperty("finish_reason").GetString() ?? "stop"
+                StopReason = choice?["finish_reason"]?.Value<string>() ?? "stop"
             };
 
-            if (msg.TryGetProperty("content", out var contentEl) && contentEl.ValueKind != JsonValueKind.Null)
+            var contentEl = msg?["content"];
+            if (contentEl != null && contentEl.Type != JTokenType.Null)
             {
-                var text = contentEl.GetString() ?? "";
+                var text = contentEl.Value<string>() ?? "";
                 if (!string.IsNullOrEmpty(text))
                     assistant.Content.Add(new TextContent { Text = text });
             }
 
-            if (msg.TryGetProperty("tool_calls", out var tcEl))
+            var tcEl = msg?["tool_calls"];
+            if (tcEl != null)
             {
-                foreach (var tc in tcEl.EnumerateArray())
+                foreach (var tc in tcEl)
                 {
-                    var fn = tc.GetProperty("function");
-                    var argsStr = fn.GetProperty("arguments").GetString() ?? "{}";
-                    var args = JsonSerializer.Deserialize<Dictionary<string, object?>>(argsStr) ?? new();
+                    var fn = tc["function"];
+                    var argsStr = fn?["arguments"]?.Value<string>() ?? "{}";
+                    var args = JsonConvert.DeserializeObject<Dictionary<string, object?>>(argsStr) ?? new();
 
                     assistant.Content.Add(new ToolCall
                     {
-                        Id = tc.GetProperty("id").GetString() ?? "",
-                        Name = fn.GetProperty("name").GetString() ?? "",
+                        Id = tc["id"]?.Value<string>() ?? "",
+                        Name = fn?["name"]?.Value<string>() ?? "",
                         Arguments = args
                     });
                 }
@@ -226,7 +228,7 @@ namespace PiAgent.PiAi
 
         /// <summary>
         /// Parse SSE stream response (simplified: processes all lines at once).
-        /// For production, use a proper streaming parser with逐行 processing.
+        /// For production, use a proper streaming parser with line-by-line processing.
         /// </summary>
         private AssistantMessage ParseStreamResponse(string body, ModelConfig model,
             Action<string>? onTextDelta, Action<ToolCall>? onToolCallDelta)
@@ -244,44 +246,49 @@ namespace PiAgent.PiAi
 
                 try
                 {
-                    using var doc = JsonDocument.Parse(data);
-                    var root = doc.RootElement;
-                    var choice = root.GetProperty("choices")[0];
-                    var delta = choice.GetProperty("message");
+                    var root = JObject.Parse(data);
+                    var choice = root["choices"]?[0];
+                    var delta = choice?["message"];
 
-                    if (delta.TryGetProperty("content", out var cEl) && cEl.ValueKind != JsonValueKind.Null)
+                    var cEl = delta?["content"];
+                    if (cEl != null && cEl.Type != JTokenType.Null)
                     {
-                        var text = cEl.GetString() ?? "";
+                        var text = cEl.Value<string>() ?? "";
                         content.Append(text);
                         onTextDelta?.Invoke(text);
                     }
 
-                    if (delta.TryGetProperty("tool_calls", out var tcEl))
+                    var tcEl = delta?["tool_calls"];
+                    if (tcEl != null)
                     {
-                        foreach (var tcItem in tcEl.EnumerateArray())
+                        foreach (var tcItem in tcEl)
                         {
-                            var idx = tcItem.GetProperty("index").GetInt32();
+                            var idx = tcItem["index"]?.Value<int>() ?? 0;
                             if (!toolCalls.TryGetValue(idx, out var tc))
                             {
                                 tc = new ToolCall();
                                 toolCalls[idx] = tc;
                             }
 
-                            if (tcItem.TryGetProperty("id", out var idEl))
-                                tc.Id = idEl.GetString() ?? tc.Id;
-                            if (tcItem.TryGetProperty("function", out var fnEl))
+                            var idEl = tcItem["id"];
+                            if (idEl != null)
+                                tc.Id = idEl.Value<string>() ?? tc.Id;
+                            var fnEl = tcItem["function"];
+                            if (fnEl != null)
                             {
-                                if (fnEl.TryGetProperty("name", out var nameEl))
-                                    tc.Name = nameEl.GetString() ?? tc.Name;
-                                if (fnEl.TryGetProperty("arguments", out var argsEl))
+                                var nameEl = fnEl["name"];
+                                if (nameEl != null)
+                                    tc.Name = nameEl.Value<string>() ?? tc.Name;
+                                var argsEl = fnEl["arguments"];
+                                if (argsEl != null)
                                 {
-                                    var partialArgs = argsEl.GetString() ?? "";
+                                    var partialArgs = argsEl.Value<string>() ?? "";
                                     // Merge partial JSON arguments
                                     if (tc.Arguments.Count == 0)
                                     {
                                         try
                                         {
-                                            tc.Arguments = JsonSerializer.Deserialize<Dictionary<string, object?>>(partialArgs) ?? new();
+                                            tc.Arguments = JsonConvert.DeserializeObject<Dictionary<string, object?>>(partialArgs) ?? new();
                                         }
                                         catch
                                         {
@@ -294,14 +301,16 @@ namespace PiAgent.PiAi
                         }
                     }
 
-                    if (choice.TryGetProperty("finish_reason", out var frEl) && frEl.ValueKind != JsonValueKind.Null)
-                        finishReason = frEl.GetString() ?? finishReason;
+                    var frEl = choice?["finish_reason"];
+                    if (frEl != null && frEl.Type != JTokenType.Null)
+                        finishReason = frEl.Value<string>() ?? finishReason;
 
-                    if (root.TryGetProperty("usage", out var usageEl))
+                    var usageEl = root["usage"];
+                    if (usageEl != null)
                         usage = new Usage(
-                            usageEl.GetProperty("prompt_tokens").GetInt32(),
-                            usageEl.GetProperty("completion_tokens").GetInt32(),
-                            usageEl.GetProperty("total_tokens").GetInt32()
+                            usageEl["prompt_tokens"]?.Value<int>() ?? 0,
+                            usageEl["completion_tokens"]?.Value<int>() ?? 0,
+                            usageEl["total_tokens"]?.Value<int>() ?? 0
                         );
                 }
                 catch { /* skip malformed lines */ }
@@ -325,13 +334,14 @@ namespace PiAgent.PiAi
             return assistant;
         }
 
-        private static Usage ParseUsage(JsonElement root)
+        private static Usage ParseUsage(JObject root)
         {
-            if (!root.TryGetProperty("usage", out var u)) return Usage.Zero;
+            var u = root["usage"];
+            if (u == null) return Usage.Zero;
             return new Usage(
-                u.GetProperty("prompt_tokens").GetInt32(),
-                u.GetProperty("completion_tokens").GetInt32(),
-                u.GetProperty("total_tokens").GetInt32()
+                u["prompt_tokens"]?.Value<int>() ?? 0,
+                u["completion_tokens"]?.Value<int>() ?? 0,
+                u["total_tokens"]?.Value<int>() ?? 0
             );
         }
     }
