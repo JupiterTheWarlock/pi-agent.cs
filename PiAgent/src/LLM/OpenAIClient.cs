@@ -35,8 +35,10 @@ namespace PiAgent.LLM
             var request = BuildRequest(context, model, stream: false);
             var json = JsonSerializer.Serialize(request, JsonOpts);
 
-            using var content = new StringContent(json, Encoding.UTF8, "application/json");
-            using var response = await _http.PostAsync($"{model.BaseUrl}/chat/completions", content, ct);
+            using var requestMsg = new HttpRequestMessage(HttpMethod.Post, $"{model.BaseUrl}/chat/completions");
+            requestMsg.Headers.TryAddWithoutValidation("Authorization", $"Bearer {model.ApiKey}");
+            requestMsg.Content = new StringContent(json, Encoding.UTF8, "application/json");
+            using var response = await _http.SendAsync(requestMsg, ct);
             var body = await response.Content.ReadAsStringAsync();
 
             if (!response.IsSuccessStatusCode)
@@ -53,7 +55,9 @@ namespace PiAgent.LLM
             var json = JsonSerializer.Serialize(request, JsonOpts);
 
             using var content = new StringContent(json, Encoding.UTF8, "application/json");
-            using var requestMsg = new HttpRequestMessage(HttpMethod.Post, $"{model.BaseUrl}/chat/completions") { Content = content };
+            using var requestMsg = new HttpRequestMessage(HttpMethod.Post, $"{model.BaseUrl}/chat/completions");
+            requestMsg.Headers.TryAddWithoutValidation("Authorization", $"Bearer {model.ApiKey}");
+            requestMsg.Content = content;
             using var response = await _http.SendAsync(requestMsg, HttpCompletionOption.ResponseHeadersRead, ct);
             var body = await response.Content.ReadAsStringAsync();
 
